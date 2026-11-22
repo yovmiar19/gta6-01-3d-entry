@@ -1,49 +1,87 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Keyboard and mouse input. Held keys are read every frame; one-shot presses
+// (enter car, pause, mute, weapon switch) are queued as flags and taken once, so a
+// press between two frames is never lost and never counted twice.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+export const ACT_ENTER = 1;
+export const ACT_PAUSE = 2;
+export const ACT_MUTE = 4;
+export const ACT_SHOOT = 8;
+export const ACT_PUNCH = 16;
+export const ACT_CONFIRM = 32;
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+const DRIVE = new Set(['KeyW', 'ArrowUp', 'KeyS', 'ArrowDown', 'KeyA', 'ArrowLeft', 'KeyD', 'ArrowRight']);
+const RUN = new Set(['ShiftLeft', 'ShiftRight']);
+const HANDBRAKE = new Set(['Space']);
 
 export function createInput(target) {
-  let left = false;
-  let right = false;
+  const held = new Set();
   let actions = 0;
+  let mouseDown = false;
 
   window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
+    if (event.repeat) return;
+    held.add(event.code);
+    if (event.code === 'KeyE') actions |= ACT_ENTER;
+    else if (event.code === 'KeyP' || event.code === 'Escape') actions |= ACT_PAUSE;
+    else if (event.code === 'KeyM') actions |= ACT_MUTE;
+    else if (event.code === 'Enter' || event.code === 'Space') actions |= ACT_CONFIRM;
+    if (DRIVE.has(event.code) || HANDBRAKE.has(event.code)) event.preventDefault();
   });
   window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
+    held.delete(event.code);
   });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
   window.addEventListener('blur', () => {
-    left = false;
-    right = false;
+    held.clear();
+    mouseDown = false;
   });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
+  target.addEventListener('mousedown', (event) => {
+    if (event.button === 0) {
+      mouseDown = true;
+      actions |= ACT_SHOOT;
+    }
   });
+  window.addEventListener('mouseup', (event) => {
+    if (event.button === 0) mouseDown = false;
+  });
+  target.addEventListener('contextmenu', (event) => event.preventDefault());
+
+  function down(...codes) {
+    return codes.some((c) => held.has(c));
+  }
 
   return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
+    // Steering: -1 left, 1 right.
+    steer() {
+      return (down('KeyD', 'ArrowRight') ? 1 : 0) - (down('KeyA', 'ArrowLeft') ? 1 : 0);
     },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
+    // Throttle: 1 forward, -1 reverse/brake, 0 coast.
+    throttle() {
+      return (down('KeyW', 'ArrowUp') ? 1 : 0) - (down('KeyS', 'ArrowDown') ? 1 : 0);
+    },
+    handbrake() {
+      return down('Space');
+    },
+    run() {
+      return down('ShiftLeft', 'ShiftRight');
+    },
+    // On foot: -1..1 on each axis (x right, z forward on screen).
+    walkX() {
+      return (down('KeyD', 'ArrowRight') ? 1 : 0) - (down('KeyA', 'ArrowLeft') ? 1 : 0);
+    },
+    walkZ() {
+      return (down('KeyW', 'ArrowUp') ? 1 : 0) - (down('KeyS', 'ArrowDown') ? 1 : 0);
+    },
+    // Held mouse button (for automatic weapons).
+    firing() {
+      return mouseDown;
+    },
+    weaponKey() {
+      for (const code of ['Digit1', 'Digit2', 'Digit3', 'Digit4']) {
+        if (held.has(code)) return code;
+      }
+      return null;
+    },
+    /** The one-shot presses since the last call, as ACT_* flags. */
     takeActions() {
       const taken = actions;
       actions = 0;

@@ -3,17 +3,196 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>SOLMAR HEAT 3D — Solmar Bay</title>
+<link rel="icon" href="data:,">
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1208; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   /* Read aloud, never shown: the status line screen readers announce. */
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* --- HUD ---------------------------------------------------------------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; display: none; }
+  .panel { background: rgba(12, 10, 8, 0.72); border: 1px solid rgba(242, 201, 76, 0.35); border-radius: 8px; padding: 10px 12px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45); }
+  .label { font-size: 10px; letter-spacing: 0.14em; color: #f2c94c; font-weight: 700; }
+
+  /* Mission panel, top-left. */
+  #mission-panel { position: absolute; top: 14px; left: 14px; width: 300px; }
+  #mission-title { font-size: 17px; font-weight: 800; letter-spacing: 0.06em; margin-top: 2px; }
+  #mission-stage { font-size: 11px; color: #ffd97a; letter-spacing: 0.1em; margin-top: 2px; }
+  #mission-objective { font-size: 13px; line-height: 1.35; margin-top: 6px; }
+  #mission-next { font-size: 11px; color: #b8b0a4; margin-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.14); padding-top: 6px; }
+
+  /* Police response list, under the mission panel. */
+  #police-list { position: absolute; top: 178px; left: 14px; width: 300px; }
+  #police-count { font-size: 12px; font-weight: 800; color: #ff8a7a; letter-spacing: 0.08em; }
+  .police-row { display: flex; gap: 8px; font-size: 12px; margin-top: 6px; align-items: baseline; }
+  .police-row .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff5a4b; display: inline-block; flex: none; }
+  .police-row .role { color: #b8b0a4; font-size: 11px; }
+  .police-row .dist { margin-left: auto; color: #ffd97a; }
+  .police-more { font-size: 11px; color: #b8b0a4; margin-top: 6px; }
+
+  /* Money / wanted / clock, top-right. */
+  #top-right { position: absolute; top: 14px; right: 14px; text-align: right; }
+  #money { font-size: 26px; font-weight: 800; color: #7ee081; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); }
+  #stars { font-size: 24px; letter-spacing: 2px; color: #f2c94c; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); margin-top: 2px; }
+  #stars.hot { color: #ff5a4b; }
+  #clock { font-size: 15px; font-weight: 700; color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); margin-top: 2px; }
+  #respect { font-size: 11px; letter-spacing: 0.1em; color: #ffd97a; margin-top: 4px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); }
+
+  /* Weapon slots, right edge. */
+  #weapons { position: absolute; top: 150px; right: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .weapon-slot { background: rgba(12, 10, 8, 0.72); border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 6px; padding: 7px 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-align: right; min-width: 130px; }
+  .weapon-slot.active { border-color: #f2c94c; color: #f2c94c; box-shadow: 0 0 0 1px #f2c94c; }
+
+  /* Minimap + vitals, bottom-left. */
+  #bottom-left { position: absolute; left: 14px; bottom: 14px; }
+  #minimap { display: block; width: 200px; height: 200px; border: 2px solid rgba(242, 201, 76, 0.5); border-radius: 8px; background: #22401f; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5); }
+  #vitals { margin-top: 8px; width: 200px; }
+  .vital-row { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; margin-top: 4px; }
+  .vital-row .vlabel { width: 46px; color: #ffd97a; letter-spacing: 0.08em; }
+  .bar { flex: 1; height: 10px; background: rgba(255, 255, 255, 0.18); border-radius: 5px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 5px; }
+  #health-bar { background: #57b368; width: 100%; }
+  #armour-bar { background: #4f9fd8; width: 0%; }
+  .vital-row .vnum { width: 26px; text-align: right; }
+  #district { font-size: 12px; font-weight: 800; letter-spacing: 0.12em; color: #fff; margin-top: 8px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); }
+
+  /* Dialogue, bottom-centre. */
+  #dialogue { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); width: 480px; max-width: 60vw; background: rgba(12, 10, 8, 0.78); border: 1px solid rgba(242, 201, 76, 0.4); border-radius: 8px; padding: 10px 14px; opacity: 0; transition: opacity 0.25s; }
+  #dialogue-speaker { font-size: 12px; font-weight: 800; letter-spacing: 0.1em; }
+  #dialogue-text { font-size: 14px; line-height: 1.4; margin-top: 4px; }
+
+  /* Speed / car, bottom-right. */
+  #vehicle-box { position: absolute; right: 14px; bottom: 14px; text-align: right; }
+  #speed { font-size: 44px; font-weight: 800; line-height: 1; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); }
+  #speed-unit { font-size: 13px; color: #ffd97a; font-weight: 700; }
+  #car-name { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; margin-top: 4px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); }
+  #car-condition { width: 170px; height: 8px; background: rgba(255, 255, 255, 0.18); border-radius: 4px; overflow: hidden; margin-left: auto; margin-top: 4px; }
+  #car-condition > #car-condition-fill { height: 100%; background: #f2c94c; width: 100%; }
+  #car-condition-label { font-size: 11px; color: #ffd97a; margin-top: 3px; }
+  #radio { font-size: 11px; color: #fff; letter-spacing: 0.08em; margin-top: 6px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); }
+
+  /* Toast message, top-centre. */
+  #message { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(12, 10, 8, 0.8); border: 1px solid rgba(242, 201, 76, 0.5); border-radius: 8px; padding: 9px 16px; font-size: 14px; font-weight: 700; opacity: 0; transition: opacity 0.3s; white-space: nowrap; }
+  /* Controls hint, bottom edge. */
+  #hint { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); font-size: 11px; color: rgba(255, 255, 255, 0.75); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); white-space: nowrap; }
+  /* Win banner, centre. */
+  #win-banner { position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%); text-align: center; opacity: 0; transition: opacity 0.5s; }
+  #win-banner .big { font-size: 52px; font-weight: 900; letter-spacing: 0.06em; color: #f2c94c; text-shadow: 0 4px 18px rgba(0, 0, 0, 0.8); }
+  #win-banner .sub { font-size: 16px; font-weight: 700; margin-top: 6px; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); }
+
+  /* --- Overlays ----------------------------------------------------------- */
+  .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 10; }
+  .overlay-card { background: rgba(10, 8, 6, 0.86); border: 1px solid rgba(242, 201, 76, 0.45); border-radius: 14px; padding: 28px 34px; width: 560px; max-width: 92vw; color: #fff; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6); max-height: 92vh; overflow-y: auto; }
+  .overlay-card h1 { margin: 0; font-size: 40px; font-weight: 900; letter-spacing: 0.04em; color: #f2c94c; }
+  .overlay-card h1 .heat { color: #ff8a5c; }
+  .overlay-card .tagline { font-size: 14px; color: #d8cfc2; margin-top: 6px; line-height: 1.45; }
+  .overlay-card h2 { font-size: 13px; letter-spacing: 0.14em; color: #f2c94c; margin: 20px 0 8px; }
+  .mission-row { display: flex; gap: 10px; align-items: baseline; width: 100%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 8px; color: #fff; padding: 9px 12px; font-size: 13px; cursor: pointer; text-align: left; margin-top: 6px; font-family: inherit; }
+  .mission-row:hover { border-color: #f2c94c; background: rgba(242, 201, 76, 0.12); }
+  .mission-row.free { border-color: rgba(242, 201, 76, 0.6); }
+  .mission-key { font-weight: 800; color: #f2c94c; width: 18px; flex: none; }
+  .mission-name { font-weight: 800; letter-spacing: 0.04em; flex: 1; }
+  .mission-reward { color: #7ee081; font-weight: 700; }
+  .mission-state { color: #b8b0a4; font-size: 12px; }
+  .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; font-size: 13px; color: #e8e0d4; }
+  .controls-grid b { color: #f2c94c; }
+  .big-btn { display: block; width: 100%; margin-top: 20px; padding: 13px; font-size: 16px; font-weight: 800; letter-spacing: 0.06em; color: #1a1208; background: #f2c94c; border: none; border-radius: 9px; cursor: pointer; font-family: inherit; }
+  .big-btn:hover { background: #ffd97a; }
+  .overlay-card .fine { font-size: 11px; color: #9a9088; margin-top: 14px; line-height: 1.5; }
+  #pause-screen .overlay-card, #gameover-screen .overlay-card { text-align: center; width: 440px; }
+  #gameover-title { font-size: 52px; }
+  #gameover-sub { font-size: 14px; color: #d8cfc2; margin-top: 8px; line-height: 1.5; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<canvas id="game" aria-label="Solmar Heat 3D: drive, steal cars, dodge the police and run missions in Solmar Bay"></canvas>
 <p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div id="mission-panel" class="panel">
+    <div class="label">MISSION</div>
+    <div id="mission-title">—</div>
+    <div id="mission-stage">—</div>
+    <div id="mission-objective">—</div>
+    <div id="mission-next">—</div>
+  </div>
+  <div id="police-list" class="panel">
+    <div id="police-count">—</div>
+    <div id="police-rows"></div>
+  </div>
+  <div id="top-right">
+    <div id="money">$400</div>
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="clock">17:30</div>
+    <div id="respect">RESPECT · 0 / 100</div>
+  </div>
+  <div id="weapons"></div>
+  <div id="bottom-left">
+    <canvas id="minimap" width="200" height="200"></canvas>
+    <div id="vitals">
+      <div class="vital-row"><span class="vlabel">HEALTH</span><span class="bar"><div id="health-bar"></div></span><span class="vnum" id="health-num">100</span></div>
+      <div class="vital-row"><span class="vlabel">ARMOUR</span><span class="bar"><div id="armour-bar"></div></span><span class="vnum" id="armour-num">0</span></div>
+    </div>
+    <div id="district">BEACHFRONT</div>
+  </div>
+  <div id="dialogue">
+    <div id="dialogue-speaker">—</div>
+    <div id="dialogue-text">—</div>
+  </div>
+  <div id="vehicle-box">
+    <div><span id="speed">0</span> <span id="speed-unit">KM/H</span></div>
+    <div id="car-name">RUKAN PELO GT</div>
+    <div id="car-condition"><div id="car-condition-fill"></div></div>
+    <div id="car-condition-label">100% OK</div>
+    <div id="radio">SOLMAR FM 98.5 — SUNSET DRIVE</div>
+  </div>
+  <div id="message"></div>
+  <div id="win-banner"><div class="big">YOU RUN SOLMAR BAY</div><div class="sub">All five jobs done. The city is yours, Raka.</div></div>
+  <div id="hint">WASD drive / walk · E enter or steal car · Space handbrake · Shift run · Click / F shoot · 1–4 weapons · P pause · M mute</div>
+</div>
+
+<div id="title-screen" class="overlay">
+  <div class="overlay-card">
+    <h1>SOLMAR <span class="heat">HEAT</span> 3D</h1>
+    <div class="tagline">Solmar Bay, golden hour. You are Raka, a wheelman building respect one job at a time — steal the cars, run the missions, lose the cops at the safehouse. The whole city is yours to drive.</div>
+    <h2>MISSIONS — PICK ONE, OR FREE ROAM</h2>
+    <div id="mission-list"></div>
+    <h2>CONTROLS</h2>
+    <div class="controls-grid">
+      <div><b>WASD / arrows</b> — drive / walk</div>
+      <div><b>E</b> — enter, exit, steal car</div>
+      <div><b>Space</b> — handbrake</div>
+      <div><b>Shift</b> — run</div>
+      <div><b>Click / F</b> — shoot / punch</div>
+      <div><b>1–4</b> — weapons</div>
+      <div><b>P</b> — pause</div>
+      <div><b>M</b> — mute</div>
+    </div>
+    <button id="title-start-btn" class="big-btn">START — FREE ROAM</button>
+    <div class="fine">A 3D open-world crime game built for make.fun's “Make GTA 6” bounty. All art is low-poly and generated in code; all sound is synthesized. No account, no downloads, no network at runtime.</div>
+  </div>
+</div>
+
+<div id="pause-screen" class="overlay">
+  <div class="overlay-card">
+    <h1>PAUSED</h1>
+    <div class="tagline">Solmar Bay waits. The cops do not — they will still be there when you come back.</div>
+    <button id="resume-btn" class="big-btn">RESUME</button>
+    <div class="fine">P / Esc resumes · M mutes · WASD drive · E enter / steal · Click shoot</div>
+  </div>
+</div>
+
+<div id="gameover-screen" class="overlay">
+  <div class="overlay-card">
+    <h1 id="gameover-title">BUSTED</h1>
+    <div id="gameover-sub">—</div>
+    <button id="continue-btn" class="big-btn">BACK TO THE SAFEHOUSE</button>
+  </div>
+</div>
+
+<script src="./vendor/three.min.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
